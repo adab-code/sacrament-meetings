@@ -1,9 +1,27 @@
+// Listado público de reuniones con búsqueda y paginación.
+// Server Component que lee query/page desde la URL (searchParams), por lo que
+// la ruta es dinámica y su estado de carga lo gestiona loading.tsx.
 import Link from "next/link";
 import MeetingCard from "@/components/MeetingCard";
-import { fetchMeetings } from "@/lib/api";
+import { MeetingSearch } from "@/components/MeetingSearch";
+import { Pagination } from "@/components/Pagination";
+import { getMeetings, getMeetingsTotalPages } from "@/lib/meetings-db";
 
-export default async function MeetingsPage() {
-  const meetings = await fetchMeetings();
+export default async function MeetingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ query?: string; page?: string }>;
+}) {
+  const { query, page } = await searchParams;
+  const safeQuery = query ?? "";
+  // Página actual de la URL (fallback 1 si no viene o no es numérica).
+  const currentPage = Number(page) || 1;
+
+  // Resuelve reuniones y total de páginas en paralelo para el mismo filtro.
+  const [meetings, totalPages] = await Promise.all([
+    getMeetings(safeQuery, currentPage),
+    getMeetingsTotalPages(safeQuery),
+  ]);
 
   return (
     <>
@@ -16,7 +34,7 @@ export default async function MeetingsPage() {
             Meetings
           </h1>
           <p className="mt-2 text-ink-700">
-            Recent and upcoming sacrament meeting agendas.
+            Search recent and upcoming sacrament meeting agendas.
           </p>
         </div>
         <Link
@@ -25,6 +43,10 @@ export default async function MeetingsPage() {
         >
           This Sunday
         </Link>
+      </div>
+
+      <div className="mt-6">
+        <MeetingSearch />
       </div>
 
       {meetings.length === 0 ? (
@@ -43,6 +65,8 @@ export default async function MeetingsPage() {
           ))}
         </div>
       )}
+
+      <Pagination totalPages={totalPages} />
     </>
   );
 }

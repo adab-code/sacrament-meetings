@@ -1,3 +1,5 @@
+// Detalle imprimible de una reunión (el programa completo, listo para impresión
+// vía CSS). Es componente cliente por el botón Print (window.print()).
 "use client";
 
 import Link from "next/link";

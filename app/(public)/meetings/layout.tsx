@@ -1,3 +1,5 @@
+// Layout del grupo de rutas (public)/meetings: envuelve las páginas públicas
+// de reuniones con su navegación interna (All meetings / This Sunday).
 import MeetingsNav from "@/components/MeetingsNav";
 
 export default function MeetingsLayout(props: LayoutProps<"/meetings">) {

@@ -1,3 +1,5 @@
+// Layout raíz de la aplicación: carga las fuentes tipográficas vía next/font,
+// declara los metadatos globales y envuelve todas las rutas con Header/Footer.
 import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 import Footer from "@/components/Footer";

@@ -1,5 +1,7 @@
+// Cabecera global: inicial del ward, nombre, fecha actual y navegación
+// principal. Lleva la clase no-print para ocultarse al imprimir.
 import Link from "next/link";
-import { WARD_NAME } from "@/lib/meetings-db";
+import { WARD_NAME } from "@/lib/config";
 import NavLinks from "./NavLinks";
 
 export default function Header() {

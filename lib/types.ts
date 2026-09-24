@@ -1,10 +1,20 @@
-export type MeetingType = "testimony" | "regular" | "stake" | "general";
+// Modelo de dominio de una reunión sacramental.
+// Cada interfaz refleja una columna o estructura de la tabla "meetings" de Neon.
 
+export type MeetingType =
+  | "testimony"
+  | "regular"
+  | "stake"
+  | "general"
+  | "special";
+
+// Etiquetas legibles por el usuario para cada tipo de reunión.
 export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
   testimony: "Testimony",
   regular: "Regular",
   stake: "Stake",
   general: "General",
+  special: "Special",
 };
 
 export interface Hymn {

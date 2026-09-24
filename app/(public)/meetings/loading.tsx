@@ -1,3 +1,5 @@
+// Estado de carga (Suspense) del segmento /meetings: esqueleto animado
+// que se muestra mientras se resuelven los datos.
 export default function MeetingsLoading() {
   return (
     <div

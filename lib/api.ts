@@ -1,6 +1,11 @@
+// Cliente HTTP para consumir las rutas de API internas de la app.
+// Se usa cuando una página (Server Component) necesita el mismo dato que
+// expone la API pública, sin duplicar la lógica de consulta.
 import { headers } from "next/headers";
 import type { SacramentMeeting } from "./types";
 
+// Construye la URL base del servidor a partir de los headers de la petición
+// (necesario para conocer el host/protocolo en cada despliegue).
 async function buildApiBaseUrl(): Promise<string> {
   const headerStore = await headers();
   const host =
@@ -11,6 +16,7 @@ async function buildApiBaseUrl(): Promise<string> {
   return `${proto}://${host}`;
 }
 
+// GET /api/meetings — listado completo (opcionalmente filtrado por fecha).
 export async function fetchMeetings(
   date?: string
 ): Promise<SacramentMeeting[]> {
@@ -29,6 +35,7 @@ export async function fetchMeetings(
   return (await response.json()) as SacramentMeeting[];
 }
 
+// GET /api/meetings/[id] — detalle de una reunión (null si no existe).
 export async function fetchMeetingById(
   id: number
 ): Promise<SacramentMeeting | null> {

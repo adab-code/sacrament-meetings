@@ -1,3 +1,5 @@
+// Navegación interna de la sección de reuniones. Componente cliente porque
+// detecta la ruta activa con usePathname (aria-current="page").
 "use client";
 
 import Link from "next/link";

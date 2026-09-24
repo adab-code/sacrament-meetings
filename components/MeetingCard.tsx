@@ -1,3 +1,5 @@
+// Tarjeta de una reunión para el listado. La tarjeta completa es un enlace
+// al detalle (/meetings/[id]).
 import Link from "next/link";
 import { MEETING_TYPE_LABELS } from "@/lib/types";
 import type { SacramentMeeting } from "@/lib/types";

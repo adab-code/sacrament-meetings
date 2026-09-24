@@ -1,6 +1,8 @@
+// Página de inicio ("/"): presentación del ward con hero (foto del templo)
+// y las tres características principales de la aplicación.
 import Image from "next/image";
 import Link from "next/link";
-import { WARD_NAME } from "@/lib/meetings-db";
+import { WARD_NAME } from "@/lib/config";
 
 function MusicNoteIcon() {
   return (
@@ -59,6 +61,7 @@ function AnnouncementIcon() {
   );
 }
 
+// Tres tarjetas que resumen las funciones del sitio.
 const features = [
   {
     icon: MusicNoteIcon,
@@ -127,14 +130,17 @@ export default function Home() {
               aria-hidden="true"
               className="absolute -inset-3 rounded-3xl bg-gradient-to-br from-gold-400/30 via-transparent to-navy-800/15 blur-xl"
             />
-            <Image
-              src="/meeting-hall.svg"
-              alt="Illustration of a meetinghouse with a steeple and rose window"
-              width={1200}
-              height={630}
-              priority
-              className="relative h-auto w-full rounded-3xl border border-cream-200 shadow-2xl shadow-navy-900/20"
-            />
+            <div className="relative aspect-[8/5] overflow-hidden rounded-3xl border border-cream-200 shadow-2xl shadow-navy-900/20">
+              <Image
+                src="/temple-hero.webp"
+                alt="Photograph of the temple exterior"
+                fill
+                priority
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                quality={80}
+                className="object-cover"
+              />
+            </div>
             <p className="mt-3 text-center text-sm italic text-ink-700">
               Come and worship with us.
             </p>

@@ -1,5 +1,6 @@
+// Pie de página global con marca, enlaces de navegación y año actual.
 import Link from "next/link";
-import { WARD_NAME } from "@/lib/meetings-db";
+import { WARD_NAME } from "@/lib/config";
 
 export default function Footer() {
   return (
