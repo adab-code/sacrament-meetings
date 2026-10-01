@@ -37,12 +37,20 @@ export default async function MeetingsPage({
             Search recent and upcoming sacrament meeting agendas.
           </p>
         </div>
-        <Link
-          href="/meetings/current"
-          className="no-print rounded-full bg-navy-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-navy-900/25 transition-all hover:-translate-y-0.5 hover:bg-navy-800 hover:shadow-xl"
-        >
-          This Sunday
-        </Link>
+        <div className="no-print flex flex-wrap items-center gap-3">
+          <Link
+            href="/meetings/current"
+            className="rounded-full bg-navy-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-navy-900/25 transition-all hover:-translate-y-0.5 hover:bg-navy-800 hover:shadow-xl"
+          >
+            This Sunday
+          </Link>
+          <Link
+            href="/meetings/new"
+            className="rounded-full border border-gold-500/60 bg-white px-6 py-3 text-sm font-semibold text-gold-700 transition-all hover:-translate-y-0.5 hover:border-gold-600 hover:bg-gold-400/10"
+          >
+            New meeting
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6">
