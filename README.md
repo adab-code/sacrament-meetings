@@ -18,6 +18,11 @@ Construido con **Next.js 16** (App Router), **React** y **Tailwind CSS**, con da
 - **Errores recuperables**: `error.tsx` por sección y páginas `not-found.tsx` propias para el detalle y la edición.
 - **Fecha duplicada** detectada desde Postgres (`23505`) y mostrada como error de campo en vez de un error 500.
 - `revalidatePath` tras cada mutación para que el listado, el detalle y la edición muestren siempre datos frescos.
+- **Autenticación con Auth.js v5** (Semana 05): login por credenciales contra la tabla `users` de Neon, con contraseñas verificadas con bcrypt y sesión en JWT cifrado (`HttpOnly`, `SameSite=Lax`).
+- **Rutas protegidas** con `proxy.ts`: `/meetings/new` y `/meetings/[id]/edit` redirigen a `/login` sin sesión; las rutas públicas siguen abiertas.
+- **Autorización en dos capas**: el proxy para las páginas y `requireAuth()` en cada Server Action de escritura, porque una Server Action es un endpoint público y el proxy no la cubre.
+- **UI según la sesión**: el encabezado muestra *Sign in* o el correo + *Sign out*, y los controles *New meeting*, *Edit* y *Delete* sólo se pintan con sesión iniciada.
+- **Metadata por ruta** (Semana 05): título con plantilla, descripción e imagen de Open Graph generada en el sitio; el detalle de cada reunión compone su título y descripción a partir del registro.
 
 ## Estructura del proyecto
 
@@ -26,7 +31,9 @@ app/
   layout.tsx                  Layout raíz (fuentes, Header/Footer, metadatos)
   page.tsx                    Home con hero e íconos de características
   not-found.tsx               404 raíz
+  opengraph-image.tsx         Imagen OG generada con ImageResponse (1200×630)
   globals.css                 Tokens de diseño y estilos globales
+  login/page.tsx              Página de inicio de sesión (+ callbackUrl)
   (public)/
     meetings/
       layout.tsx              Navegación interna de la sección de reuniones
@@ -34,31 +41,42 @@ app/
       loading.tsx             Esqueleto de carga durante el fetch de datos
       error.tsx               Boundary de errores de la sección pública
       current/page.tsx        Ruta "This Sunday" (próximo domingo)
-      [id]/page.tsx           Detalle de una reunión
+      [id]/page.tsx           Detalle de una reunión (+ generateMetadata)
       [id]/not-found.tsx      404 del detalle
   (admin)/
-    layout.tsx                Shell de administración (auth en Semana 05)
+    layout.tsx                Shell de administración (rutas protegidas)
     meetings/
       new/page.tsx            Crear reunión (Server Action createMeeting)
       error.tsx               Boundary de errores de la sección admin
       [id]/edit/page.tsx      Editar reunión (Server Action updateMeeting)
       [id]/edit/not-found.tsx 404 de la edición
   api/
+    auth/[...nextauth]/route.ts  Handlers de Auth.js (GET/POST)
     meetings/route.ts         GET /api/meetings (query, page, date)
     meetings/[id]/route.ts    GET /api/meetings/[id]
+auth.config.ts                Callbacks de Auth.js compartidos con el proxy
+auth.ts                       Provider Credentials, bcrypt, JWT y export de handlers
+proxy.ts                      Proxy de Next.js 16: protege /meetings/new y /edit
+types/next-auth.d.ts          Amplía Session/User/JWT con el claim `role`
 components/
   MeetingForm.tsx             Formulario accesible de alta/edición (useActionState)
   DeleteMeetingButton.tsx     Confirmación en dos pasos + Server Action deleteMeeting
   MeetingCard.tsx             Tarjeta con enlace estirado y controles admin
   MeetingDetail.tsx           Programa completo imprimible
+  LoginForm.tsx               Formulario de login (useActionState + useFormStatus)
+  SignOutButton.tsx           Server Action de cierre de sesión
   Header.tsx, Footer.tsx, ...  UI reutilizable
 lib/
   types.ts                    Modelo de dominio SacramentMeeting
   dates.ts                    Utilidades de fecha y domingos
   meetings-db.ts              Capa de datos Neon (leer + escribir)
-  actions.ts                  Server Actions + esquema Zod de validación
+  users-db.ts                 Lectura de usuarios para el login
+  actions.ts                  Server Actions, requireAuth() y esquema Zod
   api.ts                      Cliente HTTP hacia las rutas de API
-  config.ts                   Nombre del ward
+  config.ts                   Nombre del ward, descripción y URL del sitio
+scripts/
+  001-create-users.sql        Esquema idempotente de la tabla users
+  seed-bishopric-user.ts      Crea/actualiza la cuenta bishopric
 public/                       Assets estáticos (temple-hero.webp, íconos)
 ```
 
@@ -92,9 +110,93 @@ Detalles de implementación relevantes:
 - **Progressive enhancement.** Los formularios funcionan sin JavaScript; React
   hidrata `useActionState`/`useFormStatus` para deshabilitar el envío y mostrar
   el estado pendiente.
+- **Guardas en el servidor.** `createMeeting`, `updateMeeting` y `deleteMeeting`
+  llaman a `requireAuth()` antes de validar o escribir. Ocultar los botones no
+  protege nada: el endpoint de la Server Action sigue siendo invocable.
 
-> La autenticación y la autorización de las rutas `/admin` llegan en la Semana 05.
-> Durante la Semana 04 cualquiera con la URL puede escribir.
+## Autenticación y autorización (Semana 05)
+
+Login por **credenciales** con [Auth.js v5](https://authjs.dev) (`next-auth@5.0.0-beta.32`).
+No hay adapter: la contraseña se verifica contra la tabla `users` de Neon y la
+sesión viaja en un **JWT cifrado** en una cookie, no en una fila de base de datos.
+
+| Pieza                    | Responsabilidad                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| `auth.ts`                | Provider `Credentials`: valida con Zod, compara con `bcrypt.compare` y arma el JWT           |
+| `auth.config.ts`         | Callbacks compartidos. Al no importar `bcrypt` ni la BD, el proxy no arrastra Node            |
+| `proxy.ts`               | Intercepta las rutas admin antes de renderizar                                               |
+| `app/api/auth/[...nextauth]/route.ts` | Handlers `GET`/`POST` de Auth.js — el proxy **no** los sustituye                  |
+| `lib/users-db.ts`        | `getUserByEmail()`; devuelve el usuario con su hash, nunca el hash al cliente                |
+| `lib/actions.ts`         | `authenticate()` y `requireAuth()`                                                           |
+
+Rutas protegidas por el proxy (sin sesión → `307` a `/login?callbackUrl=…`):
+
+| Ruta                    | Con sesión | Sin sesión                     |
+| ----------------------- | ---------- | ------------------------------ |
+| `/`, `/meetings`, `/meetings/[id]`, `/meetings/current` | 200 | 200 (públicas)      |
+| `/login`                | 200        | 200                            |
+| `/meetings/new`         | 200        | 307 → `/login`                 |
+| `/meetings/[id]/edit`   | 200        | 307 → `/login`                 |
+| `GET /api/meetings*`    | 200        | 200 (sólo lectura)             |
+
+Decisiones de seguridad que conviene no deshacer:
+
+- **Fallar cerrado.** El callback `authorized` usa `!!auth?.user`, no un
+  `if (auth)` que devolvería `undefined` (falsy) cuando no hay sesión. Un caso
+  mal resuelto devuelve `false` y bloquea; `undefined` se confundiría con "sin
+  restricción".
+- **Fuera del objeto de sesión.** `passwordHash` nunca se devuelve desde
+  `authorize()`; sólo `id`, `email`, `name` y `role`, y el rol viaja como claim
+  del JWT.
+- **`callbackUrl` saneada.** `/login` sólo acepta redirecciones a rutas
+  internas que empiezan por `/`; cualquier URL absoluta se descarta. Sin esto,
+  `/login?callbackUrl=https://sitio-falso` sería un phishing de redirección.
+- **El proxy no protege las Server Actions.** Una Server Action es un endpoint
+  público POST; por eso `requireAuth()` se repite dentro de cada acción.
+- **Beta de Auth.js.** `5.0.0-beta.32` es la versión que incluye la corrección de
+  `GHSA-8fpg-xm3f-6cx3`. Conviene comprobar los avisos de seguridad antes de
+  actualizar la dependencia.
+- **`proxy.ts`, no `middleware.ts`.** Next.js 16 renombró el archivo; `auth.config.ts`
+  existe para que el proxy importe lo mínimo imprescindible.
+
+### Sesión y cookies
+
+La cookie es `authjs.session-token` (`HttpOnly`, `SameSite=Lax`, `Secure` en
+producción): no es legible desde JavaScript, así que un XSS no puede robar la
+sesión. El JWT está cifrado con AES-256-GCM usando `AUTH_SECRET`.
+
+> **Todos los usuarios son tipo `bishopric`.** No hay registro público (la
+> asignación no lo pide) ni roles distintos del rol de edición: el `role` está en
+> el esquema para que la autorización por roles sea una extensión, no una
+> necesidad actual.
+
+## Metadata (Semana 05)
+
+- **Layout raíz** (`app/layout.tsx`): `title.default` + `title.template`
+  (`%s | Provo 1st Ward`), descripción, keywords, `metadataBase` y los valores
+  `openGraph`/`twitter` compartidos.
+- **`/meetings`**: `title: "Meetings"` y descripción propias del listado.
+- **`/meetings/[id]`**: `generateMetadata()` compone el título con el tipo y la
+  fecha larga ("Testimony · Sunday, January 4, 2026") y la descripción con
+  presidencia, dirección y oradores.
+- **`app/opengraph-image.tsx`**: imagen 1200×630 generada con `ImageResponse`
+  (Satori). Tailwind no aplica ahí: los estilos van en línea porque el motor sólo
+  soporta flexbox y un subconjunto de CSS.
+- **`metadataBase`** es imprescindible: sin él, `og:image` saldría como
+  `/opengraph-image` (relativa) y las redes sociales no podrían descargarla.
+
+Dos detalles que suelen sorprender:
+
+1. **Un `title` propio corta la herencia.** Si una página declara su `title`, ya
+   no hereda la `description` ni las `openGraph` del layout. Por eso
+   `generateMetadata` las repite en lugar de confiar en la herencia.
+2. **Las rutas de streaming devuelven 200 en los 404.** Al resolver los
+   metadatos, Next.js ya envió las cabeceras, así que un `notFound()` posterior
+   llega al cliente con estado 200 (un *soft 404*). Next inyecta
+   `<meta name="robots" content="noindex">` automáticamente, de modo que los
+   buscadores no indexan esas URLs. Para forzar un 404 real habría que validar el
+   id en el proxy, lo que implica una consulta extra en cada visita al detalle;
+   no se hizo porque el coste no compensa en esta app.
 
 ## Requisitos previos
 
@@ -124,6 +226,23 @@ CREATE TABLE meetings (
 );
 ```
 
+La tabla de usuarios que usa el login (Semana 05) la crea
+`scripts/001-create-users.sql`, que es idempotente:
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+  id            SERIAL PRIMARY KEY,
+  email         TEXT        NOT NULL UNIQUE,   -- normalizado a minúsculas
+  name          TEXT        NOT NULL,
+  role          TEXT        NOT NULL DEFAULT 'bishopric',
+  password_hash TEXT        NOT NULL,          -- bcrypt, coste 10
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+El `email` se normaliza a minúsculas y sin espacios antes de buscarlo, para que
+el índice `UNIQUE` cubra de verdad "misma persona, distinta capitalización".
+
 ## Configuración
 
 1. Instalar dependencias:
@@ -132,15 +251,38 @@ CREATE TABLE meetings (
    npm install
    ```
 
-2. Crear un archivo `.env.local` en la raíz con la cadena de conexión de Neon:
+2. Crear un archivo `.env.local` en la raíz:
 
+   ```bash
+   DATABASE_URL="postgresql://..."          # Neon: reuniones + usuarios
+   AUTH_SECRET="..."                        # npx auth secret
+   AUTH_TRUST_HOST=true                     # permite los headers de Vercel
+   # NEXT_PUBLIC_SITE_URL="https://..."     # opcional, ver lib/config.ts
    ```
-   DATABASE_URL="postgresql://..."
+
+   > `DATABASE_URL` e `AUTH_SECRET` son obligatorios en producción. El cliente de
+   > Neon se crea de forma perezosa en `lib/meetings-db.ts`, así que el proyecto
+   > compila sin la primera y sólo falla al consultar en tiempo de ejecución.
+   > `AUTH_TRUST_HOST=true` es necesario en Vercel porque Auth.js lee el host de
+   > los headers reenviados. `NEXT_PUBLIC_SITE_URL` sólo se usa si se cambia de
+   > dominio; por defecto vale el despliegue actual.
+
+3. Crear la tabla de usuarios y la cuenta de prueba:
+
+   ```bash
+   npx auth secret                              # genera AUTH_SECRET
+   node --env-file=.env.local scripts/seed-bishopric-user.ts
    ```
 
-   > El cliente se crea de forma perezosa en `lib/meetings-db.ts`: el proyecto compila sin esta variable y solo falla al consultar en tiempo de ejecución.
+   El script es idempotente y **no** fija una contraseña por defecto: toma
+   `BISHOPRIC_PASSWORD` del entorno y la hashea con bcrypt. Si se omite, genera
+   una aleatoria y la imprime una sola vez.
 
-3. Insertar reuniones de ejemplo (ver [esquema](#esquema-de-la-base-de-datos)); por ejemplo, una para el próximo domingo para que funcione *This Sunday*.
+   ```bash
+   BISHOPRIC_PASSWORD='mi-clave-segura' node --env-file=.env.local scripts/seed-bishopric-user.ts
+   ```
+
+4. Insertar reuniones de ejemplo (ver [esquema](#esquema-de-la-base-de-datos)); por ejemplo, una para el próximo domingo para que funcione *This Sunday*.
 
 ## Ejecución
 
@@ -153,6 +295,14 @@ npx tsc --noEmit   # verificación de tipos
 ```
 
 Para inspeccionar performance con Lighthouse, ejecutar sobre `npm run build && npm run start` (no contra el dev server, cuyos números incluyen artefactos de desarrollo).
+
+## Despliegue
+
+El repositorio está enlazado a Vercel y despliega automáticamente desde `main`.
+Antes del primer despliegue con login hace falta **añadir `AUTH_SECRET` en el
+panel de Vercel** (Settings → Environment Variables) para *Production* y
+*Preview*: si no está, el build compila pero el login falla en tiempo de
+ejecución con un error de descifrado de cookie.
 
 ## Scripts de datos (referencia)
 

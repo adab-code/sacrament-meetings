@@ -9,6 +9,11 @@ import type { Hymn, SacramentMeeting } from "@/lib/types";
 
 interface MeetingDetailProps {
   meeting: SacramentMeeting;
+  // Semana 05: el enlace de edición sólo se pinta con sesión. Ocultarlo NO es
+  // la protección —eso lo hacen el proxy y requireAuth()—, es sólo para no
+  // ofrecer un control que va a fallar. Lo lee la página y lo pasa como prop
+  // para que este componente siga siendo un Server Component.
+  isSignedIn?: boolean;
 }
 
 function formatMeetingDate(isoDate: string): string {
@@ -53,7 +58,10 @@ function getInitials(name: string): string {
   return letters.join("");
 }
 
-export default function MeetingDetail({ meeting }: MeetingDetailProps) {
+export default function MeetingDetail({
+  meeting,
+  isSignedIn = false,
+}: MeetingDetailProps) {
   return (
     <article>
       <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -78,13 +86,15 @@ export default function MeetingDetail({ meeting }: MeetingDetailProps) {
           All meetings
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href={`/meetings/${meeting.id}/edit`}
-            className="inline-flex items-center gap-2 rounded-full border border-cream-200 bg-white px-5 py-2.5 text-sm font-semibold text-navy-900 shadow-sm transition-all hover:-translate-y-0.5 hover:border-gold-500/60 hover:bg-gold-400/10"
-          >
-            Edit
-            <span className="sr-only"> this meeting</span>
-          </Link>
+          {isSignedIn ? (
+            <Link
+              href={`/meetings/${meeting.id}/edit`}
+              className="inline-flex items-center gap-2 rounded-full border border-cream-200 bg-white px-5 py-2.5 text-sm font-semibold text-navy-900 shadow-sm transition-all hover:-translate-y-0.5 hover:border-gold-500/60 hover:bg-gold-400/10"
+            >
+              Edit
+              <span className="sr-only"> this meeting</span>
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => window.print()}

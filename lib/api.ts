@@ -2,6 +2,7 @@
 // Se usa cuando una página (Server Component) necesita el mismo dato que
 // expone la API pública, sin duplicar la lógica de consulta.
 import { headers } from "next/headers";
+import { cache } from "react";
 import type { SacramentMeeting } from "./types";
 
 // Construye la URL base del servidor a partir de los headers de la petición
@@ -36,23 +37,32 @@ export async function fetchMeetings(
 }
 
 // GET /api/meetings/[id] — detalle de una reunión (null si no existe).
-export async function fetchMeetingById(
-  id: number
-): Promise<SacramentMeeting | null> {
-  const baseUrl = await buildApiBaseUrl();
-  const response = await fetch(`${baseUrl}/api/meetings/${id}`, {
-    cache: "no-store",
-  });
+//
+// Envuelto en `cache()` de React (Semana 05) porque desde que la ruta declara
+// `generateMetadata`, el mismo detalle se pide DOS veces en la misma petición:
+// una para los metadatos y otra para pintar la página. `cache()` memoiza la
+// primera respuesta y hace que la segunda salga de memoria.
+//
+// El ámbito es la petición, no el proceso: entre peticiones distintas se vuelve
+// a pedir, así que `cache: "no-store"` sigue mandando y los datos no se
+// congelan.
+export const fetchMeetingById = cache(
+  async (id: number): Promise<SacramentMeeting | null> => {
+    const baseUrl = await buildApiBaseUrl();
+    const response = await fetch(`${baseUrl}/api/meetings/${id}`, {
+      cache: "no-store",
+    });
 
-  if (response.status === 404) {
-    return null;
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `GET /api/meetings/${id} failed with status ${response.status}`
+      );
+    }
+
+    return (await response.json()) as SacramentMeeting;
   }
-
-  if (!response.ok) {
-    throw new Error(
-      `GET /api/meetings/${id} failed with status ${response.status}`
-    );
-  }
-
-  return (await response.json()) as SacramentMeeting;
-}
+);

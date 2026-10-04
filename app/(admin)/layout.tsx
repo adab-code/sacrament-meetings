@@ -1,5 +1,10 @@
-// Layout del grupo de rutas (admin). El scaffolding de autenticación
-// (login/roles) se añadirá en la Semana 05.
+// Layout del grupo de rutas (admin).
+//
+// Las páginas de este grupo (/meetings/new y /meetings/<id>/edit) están
+// protegidas desde la Semana 05: el proxy las manda a /login sin sesión y sus
+// Server Actions vuelven a comprobar la sesión con requireAuth() antes de
+// escribir. Este layout sólo aporta el shell; la autorización vive en
+// auth.config.ts y en lib/actions.ts.
 import type { ReactNode } from "react";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
