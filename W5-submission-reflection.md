@@ -34,11 +34,17 @@ presentation; the action guard is the protection.
 | `app/(public)/meetings/[id]/page.tsx` | `generateMetadata()` building the title from the record — e.g. *"Testimony · Sunday, January 4, 2026"* — plus a description with presiding, conducting and speakers, and `og:type: article` |
 | `app/not-found.tsx` | Its own `title`/`description`, so a 404 stops inheriting the site-wide default |
 | `app/opengraph-image.tsx` | A generated 1200×630 Open Graph image via `ImageResponse`, served at `/opengraph-image` |
+| `app/robots.ts` | Robots Exclusion Standard directives plus a pointer to the sitemap |
+| `app/sitemap.ts` | `/sitemap.xml` with the home, the list and one URL per meeting |
 
 `metadataBase` is the load-bearing piece: without it `og:image` stays relative and
 social networks cannot fetch it. `fetchMeetingById` is wrapped in React's
 `cache()` so that adding `generateMetadata` did not double the database reads per
 detail view.
+
+`robots.ts` and `sitemap.ts` import the site URL from `lib/config.ts` instead of
+hard-coding the domain, so a deployment change cannot leave the sitemap pointing
+at the old host.
 
 ## Reflection
 
@@ -67,6 +73,14 @@ wrong, because it makes "deny" indistinguishable from "no opinion" to anything
 that inspects the return value, so it now reads `!!auth?.user`. I only caught
 this by writing the table of every possible session state and asking what each
 branch returns.
+
+A smaller version of the same mistake happened building the sitemap. I assumed
+`getMeetings("", 0)` would mean "no pagination" because that is how several of
+its parameters default. It does not: the function always computes an OFFSET from
+the page, so page `0` produces `offset = -ITEMS_PER_PAGE`, which Postgres rejects.
+The assumption also carried a second cost — `getMeetings` selects every `jsonb`
+column when the sitemap only needs `id` and `date`. Rather than patch around it I
+added a small `getMeetingIndex()` with the projection the sitemap actually needs.
 
 **Improvements made or considered.** I split the configuration into
 `auth.config.ts` and `auth.ts` so the proxy imports only the callbacks and never

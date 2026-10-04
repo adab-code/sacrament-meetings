@@ -32,6 +32,8 @@ app/
   page.tsx                    Home con hero e íconos de características
   not-found.tsx               404 raíz
   opengraph-image.tsx         Imagen OG generada con ImageResponse (1200×630)
+  robots.ts                   Directivas para rastreadores + puntero al sitemap
+  sitemap.ts                  sitemap.xml con una URL por reunión
   globals.css                 Tokens de diseño y estilos globales
   login/page.tsx              Página de inicio de sesión (+ callbackUrl)
   (public)/
@@ -71,6 +73,7 @@ lib/
   dates.ts                    Utilidades de fecha y domingos
   meetings-db.ts              Capa de datos Neon (leer + escribir)
   users-db.ts                 Lectura de usuarios para el login
+  getMeetingIndex()           Id + fecha de cada reunión, para el sitemap
   actions.ts                  Server Actions, requireAuth() y esquema Zod
   api.ts                      Cliente HTTP hacia las rutas de API
   config.ts                   Nombre del ward, descripción y URL del sitio
@@ -182,8 +185,30 @@ sesión. El JWT está cifrado con AES-256-GCM usando `AUTH_SECRET`.
 - **`app/opengraph-image.tsx`**: imagen 1200×630 generada con `ImageResponse`
   (Satori). Tailwind no aplica ahí: los estilos van en línea porque el motor sólo
   soporta flexbox y un subconjunto de CSS.
+- **`app/robots.ts`**: directivas del Robots Exclusion Standard. Antes de este
+  archivo, `/robots.txt` caía en la página 404 y los buscadores recibían HTML con
+  estado 404 en lugar de directivas.
+- **`app/sitemap.ts`**: `/sitemap.xml` con la home, el listado y **una URL por
+  reunión**, que son las páginas que la gente busca de verdad.
 - **`metadataBase`** es imprescindible: sin él, `og:image` saldría como
   `/opengraph-image` (relativa) y las redes sociales no podrían descargarla.
+
+`robots.ts` y `sitemap.ts` importan `SITE_URL` de `lib/config.ts` en lugar de
+escribir el dominio a mano, para que no haya dos copias que se desincronicen al
+cambiar de despliegue.
+
+### Indexación
+
+`next.config.ts` declara `X-Robots-Tag: index, follow` a nivel de aplicación
+porque **Vercel inyecta `X-Robots-Tag: noindex` en el edge** de los despliegues
+`.vercel.app`; el header de la app tiene prioridad. Sin él, Lighthouse penaliza la
+categoría SEO y un rastreador respeta el `noindex` del edge.
+
+Un matiz honesto: esto hace indexable la *respuesta*, pero Vercel sigue
+recomendando `noindex` para subdominios `vercel.app` porque no son dominios
+propios. Para que el sitio se indexe de verdad hay que añadirle un dominio
+propio; el override del header sólo resuelve la auditoría y la señal que recibe el
+rastreador.
 
 Dos detalles que suelen sorprender:
 
@@ -197,6 +222,12 @@ Dos detalles que suelen sorprender:
    buscadores no indexan esas URLs. Para forzar un 404 real habría que validar el
    id en el proxy, lo que implica una consulta extra en cada visita al detalle;
    no se hizo porque el coste no compensa en esta app.
+
+> Nota sobre `robots.txt` y los 404 de detalle: `robots.txt` pide a los
+> rastreadores que.visiten el sitio, pero el detalle de una reunión inexistente
+> responde 200 (punto 2). El `noindex` que inyecta Next evita que se indexen, pero
+> un sitemap ideal no debería listar URLs así; hoy las que lista son todas
+> verificables con un 200.
 
 ## Requisitos previos
 
