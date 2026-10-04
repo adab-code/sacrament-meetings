@@ -2,8 +2,43 @@
 
 ## Project Links
 
-- **GitHub repository:** https://github.com/adab-code/sacrament-meetings (branch `main`)
+- **GitHub repository:** https://github.com/adab-code/sacrament-meetings (branch `main`, commit `555b432`)
 - **Production URL:** https://sacrament-meetings-team07-7247.vercel.app
+- **Sign in at** `/login` with the account `bishopric@provo1stward.org`
+  (role `bishopric`). The password is shared with the grader out of band rather
+  than committed here, since this repository is public and a plaintext password
+  in a README would contradict the storage rules described in it.
+- **Build note:** the build compiles without secrets, but login needs
+  `AUTH_SECRET` and `AUTH_TRUST_HOST` in the Vercel environment variables;
+  without them the session cookie cannot be encrypted or decrypted.
+
+## What I added this week
+
+**A protected authentication route.** Login is Auth.js v5 with the `Credentials`
+provider, checking a bcrypt hash in a new Neon `users` table. Two routes are
+protected by `proxy.ts` — `/meetings/new` and `/meetings/[id]/edit` — and each
+answers `307` to `/login?callbackUrl=…` without a session. The public reading
+routes (`/`, `/meetings`, `/meetings/[id]`, `/meetings/current`) stay open on
+purpose, and only one role exists, so authorisation is not yet a matrix. The
+lesson of the week is that the proxy is not the whole story: a Server Action is a
+public POST endpoint the proxy never sees, so `requireAuth()` also runs inside
+`createMeeting`, `updateMeeting` and `deleteMeeting`. Hiding the buttons is
+presentation; the action guard is the protection.
+
+**Metadata added.**
+
+| Route | What it now emits |
+| --- | --- |
+| `app/layout.tsx` | `title.default` + `title.template` (`%s \| Provo 1st Ward`), description, `applicationName`, keywords, `metadataBase`, and shared `openGraph` / `twitter` defaults |
+| `app/(public)/meetings/page.tsx` | Static `title: "Meetings"` and a list-specific description |
+| `app/(public)/meetings/[id]/page.tsx` | `generateMetadata()` building the title from the record — e.g. *"Testimony · Sunday, January 4, 2026"* — plus a description with presiding, conducting and speakers, and `og:type: article` |
+| `app/not-found.tsx` | Its own `title`/`description`, so a 404 stops inheriting the site-wide default |
+| `app/opengraph-image.tsx` | A generated 1200×630 Open Graph image via `ImageResponse`, served at `/opengraph-image` |
+
+`metadataBase` is the load-bearing piece: without it `og:image` stays relative and
+social networks cannot fetch it. `fetchMeetingById` is wrapped in React's
+`cache()` so that adding `generateMetadata` did not double the database reads per
+detail view.
 
 ## Reflection
 
