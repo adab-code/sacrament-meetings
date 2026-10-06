@@ -1,6 +1,15 @@
 // 404 raíz. Next.js lo usa para las URLs que no coinciden con ninguna ruta y
 // como última respaldo cuando un not-found.tsx más específico no existe.
+import type { Metadata } from "next";
 import Link from "next/link";
+
+// Sin este título, una página de error que no declara el suyo hereda el `default`
+// del layout raíz ("Provo 1st Ward · Sacrament Meeting Planner"), que describe el
+// sitio y no el error. En un 404 conviene decirlo explícitamente.
+export const metadata: Metadata = {
+  title: "Page not found",
+  description: "The page you are looking for does not exist.",
+};
 
 export default function NotFound() {
   return (

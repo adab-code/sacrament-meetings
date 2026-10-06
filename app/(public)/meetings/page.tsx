@@ -1,11 +1,25 @@
 // Listado público de reuniones con búsqueda y paginación.
 // Server Component que lee query/page desde la URL (searchParams), por lo que
 // la ruta es dinámica y su estado de carga lo gestiona loading.tsx.
+//
+// También resuelve la sesión (Semana 05) para decidir si se pintan los controles
+// de administración. Se lee una sola vez por página y se reparte como prop a las
+// tarjetas, en lugar de llamar a auth() una vez por reunión.
+import type { Metadata } from "next";
 import Link from "next/link";
 import MeetingCard from "@/components/MeetingCard";
 import { MeetingSearch } from "@/components/MeetingSearch";
 import { Pagination } from "@/components/Pagination";
+import { auth } from "@/auth";
 import { getMeetings, getMeetingsTotalPages } from "@/lib/meetings-db";
+
+// Metadatos del listado (Semana 05): título y descripción propios del route
+// segment, sobre los por defecto del layout raíz.
+export const metadata: Metadata = {
+  title: "Meetings",
+  description:
+    "Search recent and upcoming sacrament meeting agendas: presiding, conducting, speakers and meeting type.",
+};
 
 export default async function MeetingsPage({
   searchParams,
@@ -17,11 +31,14 @@ export default async function MeetingsPage({
   // Página actual de la URL (fallback 1 si no viene o no es numérica).
   const currentPage = Number(page) || 1;
 
-  // Resuelve reuniones y total de páginas en paralelo para el mismo filtro.
-  const [meetings, totalPages] = await Promise.all([
+  // Sesión y datos del listado en paralelo: no dependen entre sí.
+  const [session, meetings, totalPages] = await Promise.all([
+    auth(),
     getMeetings(safeQuery, currentPage),
     getMeetingsTotalPages(safeQuery),
   ]);
+
+  const isSignedIn = !!session?.user;
 
   return (
     <>
@@ -44,12 +61,17 @@ export default async function MeetingsPage({
           >
             This Sunday
           </Link>
-          <Link
-            href="/meetings/new"
-            className="rounded-full border border-gold-500/60 bg-white px-6 py-3 text-sm font-semibold text-gold-700 transition-all hover:-translate-y-0.5 hover:border-gold-600 hover:bg-gold-400/10"
-          >
-            New meeting
-          </Link>
+          {/* El enlace de alta sólo existe para el bishopric: sin sesión lleva a
+              /login, que es el comportamiento correcto, pero sería un botón
+              muerto en la UI. */}
+          {isSignedIn ? (
+            <Link
+              href="/meetings/new"
+              className="rounded-full border border-gold-500/60 bg-white px-6 py-3 text-sm font-semibold text-gold-700 transition-all hover:-translate-y-0.5 hover:border-gold-600 hover:bg-gold-400/10"
+            >
+              New meeting
+            </Link>
+          ) : null}
         </div>
       </div>
 
@@ -69,7 +91,11 @@ export default async function MeetingsPage({
       ) : (
         <div className="mt-8 grid gap-5 md:grid-cols-2">
           {meetings.map((meeting) => (
-            <MeetingCard key={meeting.id} meeting={meeting} />
+            <MeetingCard
+              key={meeting.id}
+              meeting={meeting}
+              isSignedIn={isSignedIn}
+            />
           ))}
         </div>
       )}
