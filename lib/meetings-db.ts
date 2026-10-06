@@ -120,21 +120,137 @@ export async function getMeetingById(
   return rows[0] ?? null;
 }
 
-// Stubs de escritura — mantienen la firma para la Semana 04, donde se
-// conectarán a INSERT/UPDATE/DELETE reales de la base de datos.
+// Lista blanca de columnas actualizables: impide interpolar en el SQL nombres
+// de columna que vengan de la entrada del usuario. El orden de las entradas es
+// irrelevante porque el UPDATE se arma dinámicamente.
+const UPDATABLE_COLUMNS = {
+  date: "date",
+  meetingType: "meeting_type",
+  presiding: "presiding",
+  conducting: "conducting",
+  announcements: "announcements",
+  openingHymn: "opening_hymn",
+  openingPrayer: "opening_prayer",
+  wardBusiness: "ward_business",
+  stakeBusiness: "stake_business",
+  sacramentHymn: "sacrament_hymn",
+  speakers: "speakers",
+  closingHymn: "closing_hymn",
+  closingPrayer: "closing_prayer",
+} as const satisfies Record<keyof Omit<SacramentMeeting, "id">, string>;
+
+// Proyección compartida por las consultas de escritura (alias a camelCase).
+const RETURNING_COLUMNS = `
+  id,
+  to_char(date, 'YYYY-MM-DD') AS "date",
+  meeting_type                AS "meetingType",
+  presiding, conducting, announcements,
+  opening_hymn                AS "openingHymn",
+  opening_prayer              AS "openingPrayer",
+  ward_business               AS "wardBusiness",
+  stake_business              AS "stakeBusiness",
+  sacrament_hymn              AS "sacramentHymn",
+  speakers,
+  closing_hymn                AS "closingHymn",
+  closing_prayer              AS "closingPrayer"
+`;
+
+// Columnas jsonb: sus valores se serializan a JSON antes de enviarlos.
+const JSONB_COLUMNS = new Set<string>([
+  "opening_hymn",
+  "ward_business",
+  "sacrament_hymn",
+  "speakers",
+  "closing_hymn",
+]);
+
+// Los valores que van a columnas jsonb se serializan aquí, no se dejan en
+// manos del driver: @neondatabase/serverless convierte CUALQUIER array de
+// JavaScript en un literal de array de Postgres ('{"a","b"}'), y eso es
+// inválido para un jsonb que contiene una lista de objetos. Las columnas
+// TEXT[] (announcements) sí reciben el array directamente.
+function toJsonb(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+// Inserta una reunión nueva y devuelve el registro completo (con su id).
 export async function addMeeting(
   data: Omit<SacramentMeeting, "id">
 ): Promise<SacramentMeeting> {
-  throw new Error("addMeeting: database implementation coming in Week 04");
+  const rows = (await getDb().query(
+    `INSERT INTO meetings (
+       date, meeting_type, presiding, conducting, announcements,
+       opening_hymn, opening_prayer, ward_business, stake_business,
+       sacrament_hymn, speakers, closing_hymn, closing_prayer
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     RETURNING ${RETURNING_COLUMNS}`,
+    [
+      data.date,
+      data.meetingType,
+      data.presiding,
+      data.conducting,
+      data.announcements ?? [],
+      toJsonb(data.openingHymn),
+      data.openingPrayer,
+      toJsonb(data.wardBusiness),
+      data.stakeBusiness ?? false,
+      toJsonb(data.sacramentHymn),
+      toJsonb(data.speakers),
+      toJsonb(data.closingHymn),
+      data.closingPrayer,
+    ]
+  )) as unknown as SacramentMeeting[];
+
+  const created = rows[0];
+  if (!created) {
+    throw new Error("addMeeting: INSERT ... RETURNING no devolvió ninguna fila");
+  }
+  return created;
 }
 
+// Actualiza sólo los campos presentes en `updates` y devuelve la reunión
+// resultante, o null si el id no existe. Si `updates` viene vacío se limita a
+// leer el registro (mismo contrato que getMeetingById).
 export async function updateMeeting(
   id: number,
   updates: Partial<Omit<SacramentMeeting, "id">>
 ): Promise<SacramentMeeting | null> {
-  throw new Error("updateMeeting: database implementation coming in Week 04");
+  const assignments: string[] = [];
+  const params: unknown[] = [];
+
+  for (const field of Object.keys(
+    UPDATABLE_COLUMNS
+  ) as (keyof typeof UPDATABLE_COLUMNS)[]) {
+    const value = updates[field];
+    if (value === undefined) {
+      continue;
+    }
+    const column = UPDATABLE_COLUMNS[field];
+    params.push(JSONB_COLUMNS.has(column) ? toJsonb(value) : value);
+    assignments.push(`${column} = $${params.length}`);
+  }
+
+  if (assignments.length === 0) {
+    return getMeetingById(id);
+  }
+
+  params.push(id);
+  const rows = (await getDb().query(
+    `UPDATE meetings
+     SET ${assignments.join(", ")}
+     WHERE id = $${params.length}
+     RETURNING ${RETURNING_COLUMNS}`,
+    params
+  )) as unknown as SacramentMeeting[];
+
+  return rows[0] ?? null;
 }
 
+// Borra una reunión. Devuelve false si el id no existía (y no lanza).
 export async function deleteMeeting(id: number): Promise<boolean> {
-  throw new Error("deleteMeeting: database implementation coming in Week 04");
+  const rows = (await getDb().query(
+    "DELETE FROM meetings WHERE id = $1 RETURNING id",
+    [id]
+  )) as unknown as Array<{ id: number }>;
+  return rows.length > 0;
 }
