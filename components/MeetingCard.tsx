@@ -1,6 +1,12 @@
-// Tarjeta de una reunión para el listado. La tarjeta completa es un enlace
-// al detalle (/meetings/[id]).
+// Tarjeta de una reunión para el listado.
+//
+// La tarjeta entera es una sola superficie interactiva: el <Link> del título
+// se estira con un pseudo-elemento `after:inset-0` hasta cubrir la tarjeta
+// (patrón "stretched link"). Los controles de administración viven fuera de ese
+// enlace, en una capa con z-10, para que sigan siendo pulsables y para no
+// anidar un formulario dentro de un <a>.
 import Link from "next/link";
+import DeleteMeetingButton from "@/components/DeleteMeetingButton";
 import { MEETING_TYPE_LABELS } from "@/lib/types";
 import type { SacramentMeeting } from "@/lib/types";
 
@@ -23,41 +29,49 @@ function speakerCount(meeting: SacramentMeeting): number {
 
 export default function MeetingCard({ meeting }: MeetingCardProps) {
   const count = speakerCount(meeting);
+  const formattedDate = formatMeetingDate(meeting.date);
+  const label = MEETING_TYPE_LABELS[meeting.meetingType];
 
   return (
-    <Link
-      href={`/meetings/${meeting.id}`}
-      className="group flex flex-col rounded-2xl border border-cream-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-gold-500/60 hover:shadow-xl hover:shadow-navy-900/10"
-    >
+    <article className="group relative flex flex-col rounded-2xl border border-cream-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-gold-500/60 hover:shadow-xl hover:shadow-navy-900/10 has-[:focus-visible]:border-gold-500/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-gold-400/50">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-gold-700">
-          {formatMeetingDate(meeting.date)}
+          {formattedDate}
         </p>
         <span className="rounded-full bg-cream-200/70 px-3 py-1 text-xs font-medium text-navy-900">
-          {MEETING_TYPE_LABELS[meeting.meetingType]}
+          {label}
         </span>
       </div>
 
       <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight text-navy-900">
-        {MEETING_TYPE_LABELS[meeting.meetingType]} Meeting
+        <Link
+          href={`/meetings/${meeting.id}`}
+          className="outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']"
+        >
+          {label} Meeting
+          <span className="sr-only"> on {formattedDate}</span>
+        </Link>
       </h2>
 
       <p className="mt-2 text-sm leading-6 text-ink-700">
-        Presided by <span className="font-medium text-navy-900">{meeting.presiding}</span>
+        Presided by{" "}
+        <span className="font-medium text-navy-900">{meeting.presiding}</span>
         &nbsp;&middot;&nbsp;Conducted by{" "}
         <span className="font-medium text-navy-900">{meeting.conducting}</span>
       </p>
 
-      <div className="mt-auto flex items-center justify-between border-t border-cream-200 pt-4 [margin-top:auto]">
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-cream-200 pt-4">
         <p className="text-sm text-ink-700">
           {count > 0
             ? `${count} ${count === 1 ? "speaker" : "speakers"} assigned`
             : "No speakers assigned yet"}
         </p>
-        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gold-700 transition-transform group-hover:translate-x-0.5">
+        <span
+          aria-hidden="true"
+          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-gold-700 transition-transform group-hover:translate-x-0.5"
+        >
           View agenda
           <svg
-            aria-hidden="true"
             className="h-4 w-4"
             fill="none"
             viewBox="0 0 24 24"
@@ -72,6 +86,18 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
           </svg>
         </span>
       </div>
-    </Link>
+
+      {/* Controles de administración: fuera del enlace estirado. */}
+      <div className="relative z-10 mt-4 flex flex-wrap items-center gap-2 no-print">
+        <Link
+          href={`/meetings/${meeting.id}/edit`}
+          className="inline-flex items-center gap-1.5 rounded-full border border-cream-200 px-4 py-2 text-xs font-semibold text-navy-900 transition hover:border-gold-400 hover:bg-gold-400/10"
+        >
+          Edit
+          <span className="sr-only"> the {formattedDate} meeting</span>
+        </Link>
+        <DeleteMeetingButton id={meeting.id} date={meeting.date} />
+      </div>
+    </article>
   );
 }
