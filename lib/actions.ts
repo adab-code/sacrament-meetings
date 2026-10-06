@@ -3,11 +3,17 @@
 // Todas las mutaciones (crear, editar, borrar) entran por aquí: los formularios
 // nunca hablan con la base de datos directamente. Cada acción sigue el mismo
 // contrato:
-//   1. Valida el FormData con Zod en el servidor (fuente de verdad).
-//   2. Si la validación falla devuelve errores por campo (error esperado) para
+//   1. Exige una sesión válida (Semana 05): el proxy protects las páginas, pero
+//      una Server Action es un endpoint público y se puede invocar directamente
+//      con una petición POST, así que la autorización se repite aquí, en el
+//      servidor y lo más cerca posible de la escritura.
+//   2. Valida el FormData con Zod en el servidor (fuente de verdad).
+//   3. Si la validación falla devuelve errores por campo (error esperado) para
 //      que el formulario los pinte junto al input.
-//   3. Si la base de datos falla por una causa inesperada, se registra y se
+//   4. Si la base de datos falla por una causa inesperada, se registra y se
 //      relanza un Error legible que recoge el error.tsx del segmento.
+//
+// Además vive aquí `authenticate`, el Server Action del inicio de sesión.
 //
 // Nota: 'use server' solo permite exportar funciones async (y tipos, que se
 // borran al compilar), así que el esquema y los helpers son privados.
@@ -15,7 +21,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { AuthError } from "next-auth";
 import { z } from "zod";
+import { auth, signIn } from "@/auth";
 import {
   addMeeting,
   deleteMeeting as deleteMeetingRow,
@@ -249,6 +257,32 @@ function duplicateDateField(error: unknown): MeetingFormState | null {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Autorización (Semana 05)
+// ---------------------------------------------------------------------------
+
+// Exige una sesión válida antes de dejar escribir en la base de datos.
+//
+// El proxy (proxy.ts) ya manda a /login a quien navegue a /meetings/new o
+// /meetings/<id>/edit sin sesión, pero eso sólo cubre la navegación: una Server
+// Action es un endpoint que acepta un POST directo y no pasa por el proxy como
+// lo haría una visita a la página. Ocultar el botón no protege nada. Esta
+// función es la comprobación que de verdad importa.
+//
+// Lanza un error en lugar de devolver estado: si no hay sesión no hay formulario
+// que haya que rellenar, y un error sin manejar lo recoge el error.tsx del
+// segmento en vez de devolverle un "error" de campo a alguien que no ha enviado
+// nada.
+async function requireAuth() {
+  const session = await auth();
+
+  if (!session?.user) {
+    throw new Error("Not authenticated: sign in to manage meetings.");
+  }
+
+  return session;
+}
+
 // Refresca el listado y, si aplica, la página de detalle de la reunión.
 function revalidateMeetings(id?: number) {
   revalidatePath("/meetings");
@@ -268,6 +302,8 @@ export async function createMeeting(
   _prevState: MeetingFormState,
   formData: FormData
 ): Promise<MeetingFormState> {
+  await requireAuth();
+
   const parsed = MeetingFormSchema.safeParse(readFormData(formData));
 
   if (!parsed.success) {
@@ -302,6 +338,8 @@ export async function updateMeeting(
   _prevState: MeetingFormState,
   formData: FormData
 ): Promise<MeetingFormState> {
+  await requireAuth();
+
   if (!Number.isInteger(id) || id <= 0) {
     return { message: "That meeting id is not valid." };
   }
@@ -338,6 +376,8 @@ export async function updateMeeting(
 // Borra una reunión. Se enlaza con .bind(null, id) en el botón de cada tarjeta;
 // no necesita estado porque no devuelve feedback al usuario.
 export async function deleteMeeting(id: number): Promise<void> {
+  await requireAuth();
+
   let removed: boolean;
   try {
     removed = await deleteMeetingRow(id);
@@ -355,4 +395,46 @@ export async function deleteMeeting(id: number): Promise<void> {
 
   revalidateMeetings(id);
   redirect("/meetings");
+}
+
+// ---------------------------------------------------------------------------
+// Autenticación (Semana 05)
+// ---------------------------------------------------------------------------
+
+// Inicia sesión con email y contraseña.
+//
+// Auth.js lanza sus errores como excepciones, y el que produce un
+// CredentialsSignin es el caso normal de "esa contraseña no es la correcta": se
+// traduce a un mensaje que el LoginForm pinta. Cualquier otro error se vuelve a
+// lanzar para que Next.js lo trate como error de servidor.
+//
+// El `throw error` final es importante: signIn() termina con un redirect(), y su
+// excepción interna debe propagarse para que Next.js la convierta en navegación.
+// Si se devolviera el error en lugar de relanzarlo, el login "funcionaría" pero
+// nunca aparecería la página siguiente.
+export async function authenticate(
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  try {
+    await signIn("credentials", formData);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CredentialsSignin":
+          return "Invalid email or password.";
+        default:
+          return "Something went wrong. Please try again.";
+      }
+    }
+
+    // SignOut/SignIn lanzan un error de redirección que no es un AuthError: si
+    // se capturara aquí, se devolvería como estado y el usuario se quedaría
+    // esperando en la página de login con la sesión ya creada.
+    throw error;
+  }
+
+  // `signIn` siempre redirige, así que no se llega aquí. Si se llegara,
+  // `undefined` es un estado válido para useActionState (sin error que mostrar).
+  return undefined;
 }

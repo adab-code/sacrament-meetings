@@ -73,6 +73,25 @@ export async function getMeetingsTotalPages(
   return Math.ceil(Number(rows[0].count) / ITEMS_PER_PAGE);
 }
 
+// Listado ligero de id + fecha, sin paginar, para el sitemap (Semana 05).
+//
+// Existe una función propia en vez de reutilizar `getMeetings("", 0)` por dos
+// motivos concretos: `getMeetings` siempre calcula un OFFSET a partir de la
+// página, así que pedir la página 0 daría `offset = -ITEMS_PER_PAGE`, y un
+// OFFSET negativo es un error en Postgres; además el sitemap sólo necesita
+// `id` y `date`, mientras que `getMeetings` arrastra todas las columnas `jsonb`
+// (himnos, oradores, asuntos) que ahí se descartan.
+export async function getMeetingIndex(): Promise<
+  Array<{ id: number; date: string }>
+> {
+  const rows = (await getDb()`
+    SELECT id, to_char(date, 'YYYY-MM-DD') AS "date"
+    FROM meetings
+    ORDER BY date DESC
+  `) as unknown as Array<{ id: number; date: string }>;
+  return rows;
+}
+
 // Busca la reunión de una fecha concreta ('YYYY-MM-DD'). Usado por
 // /meetings/current para resolver la agenda del próximo domingo.
 export async function getMeetingByDate(

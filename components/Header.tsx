@@ -1,16 +1,27 @@
-// Cabecera global: inicial del ward, nombre, fecha actual y navegación
-// principal. Lleva la clase no-print para ocultarse al imprimir.
+// Cabecera global: inicial del ward, nombre, fecha actual, navegación principal
+// y los controles de sesión (Semana 05). Lleva la clase no-print para ocultarse
+// al imprimir.
+//
+// Sigue siendo un Server Component: `await auth()` lee la cookie de sesión, que
+// es información privada, así que no puede bajar a un Client Component como
+// NavLinks. Eso también significa que la cabecera lee cookies en cada render y
+// por tanto las páginas dejan de poder prerenderizarse de forma estática.
 import Link from "next/link";
+import { auth } from "@/auth";
 import { WARD_NAME } from "@/lib/config";
 import NavLinks from "./NavLinks";
+import SignOutButton from "./SignOutButton";
 
-export default function Header() {
+export default async function Header() {
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+
+  const session = await auth();
+  const user = session?.user;
 
   return (
     <header className="no-print border-b border-cream-200 bg-cream-50/80 backdrop-blur-sm">
@@ -52,6 +63,24 @@ export default function Header() {
             {today}
           </p>
           <NavLinks />
+
+          {/* Controles de sesión. El email se muestra sólo al usuario con sesión
+              ya autenticado, así que no filtra nada que no sea suyo. */}
+          {user ? (
+            <div className="flex items-center gap-3">
+              <span className="hidden text-sm text-ink-700 sm:inline">
+                {user.email}
+              </span>
+              <SignOutButton />
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="rounded-full bg-navy-900 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-navy-900/20 transition hover:bg-navy-800"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
     </header>

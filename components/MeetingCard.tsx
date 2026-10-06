@@ -12,6 +12,10 @@ import type { SacramentMeeting } from "@/lib/types";
 
 interface MeetingCardProps {
   meeting: SacramentMeeting;
+  // Semana 05: los controles de administración (editar y borrar) sólo se pintan
+  // con sesión. La autorización real está en el proxy y en requireAuth() dentro
+  // de las Server Actions; esto es sólo para no ofrecer botones inútiles.
+  isSignedIn?: boolean;
 }
 
 function formatMeetingDate(isoDate: string): string {
@@ -27,7 +31,10 @@ function speakerCount(meeting: SacramentMeeting): number {
   return meeting.speakers.filter((item) => item.type === "speaker").length;
 }
 
-export default function MeetingCard({ meeting }: MeetingCardProps) {
+export default function MeetingCard({
+  meeting,
+  isSignedIn = false,
+}: MeetingCardProps) {
   const count = speakerCount(meeting);
   const formattedDate = formatMeetingDate(meeting.date);
   const label = MEETING_TYPE_LABELS[meeting.meetingType];
@@ -87,17 +94,20 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
         </span>
       </div>
 
-      {/* Controles de administración: fuera del enlace estirado. */}
-      <div className="relative z-10 mt-4 flex flex-wrap items-center gap-2 no-print">
-        <Link
-          href={`/meetings/${meeting.id}/edit`}
-          className="inline-flex items-center gap-1.5 rounded-full border border-cream-200 px-4 py-2 text-xs font-semibold text-navy-900 transition hover:border-gold-400 hover:bg-gold-400/10"
-        >
-          Edit
-          <span className="sr-only"> the {formattedDate} meeting</span>
-        </Link>
-        <DeleteMeetingButton id={meeting.id} date={meeting.date} />
-      </div>
+      {/* Controles de administración: fuera del enlace estirado y sólo con
+          sesión iniciada. */}
+      {isSignedIn ? (
+        <div className="relative z-10 mt-4 flex flex-wrap items-center gap-2 no-print">
+          <Link
+            href={`/meetings/${meeting.id}/edit`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-cream-200 px-4 py-2 text-xs font-semibold text-navy-900 transition hover:border-gold-400 hover:bg-gold-400/10"
+          >
+            Edit
+            <span className="sr-only"> the {formattedDate} meeting</span>
+          </Link>
+          <DeleteMeetingButton id={meeting.id} date={meeting.date} />
+        </div>
+      ) : null}
     </article>
   );
 }
